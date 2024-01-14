@@ -1,0 +1,109 @@
+<html>
+<head>
+    <title>Task Manager</title>
+</head>
+<body>
+    <h1>Task Manager</h1>
+    <h2>Register</h2>
+    <form id="register-form" onsubmit="register(event)">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required><br>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required><br>
+        <input type="submit" value="Register">
+    </form>
+
+    <h2>Login</h2>
+    <form id="login-form" onsubmit="login(event)">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required><br>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required><br>
+        <input type="submit" value="Login">
+    </form>
+
+    <h2>Logout</h2>
+    <button onclick="logout()">Logout</button>
+
+    <h2>Protected Content</h2>
+    <div id="protected-content"></div>
+
+    <script>
+        function register(event) {
+            event.preventDefault();
+
+            const form = document.getElementById("register-form");
+            const username = form.elements["username"].value;
+            const password = form.elements["password"].value;
+
+            fetch("http://localhost:8080/register", {
+                method: "POST",
+                body: JSON.stringify({ username, password }),
+                headers: { "Content-Type": "application/json" }
+            })
+            .then(response => response.text())
+            .then(data => {
+                alert(data);
+                form.reset();
+            })
+            .catch(error => {
+                console.error(error);
+                alert("An error occurred");
+            });
+        }
+
+        function login(event) {
+            event.preventDefault();
+
+            const form = document.getElementById("login-form");
+            const username = form.elements["username"].value;
+            const password = form.elements["password"].value;
+
+            fetch("http://localhost:8080/login", {
+                method: "POST",
+                body: JSON.stringify({ username, password }),
+                headers: { "Content-Type": "application/json" }
+            })
+            .then(response => response.text())
+            .then(data => {
+                alert(data);
+                form.reset();
+                loadProtectedContent();
+            })
+            .catch(error => {
+                console.error(error);
+                alert("An error occurred");
+            });
+        }
+
+        function logout() {
+            fetch("http://localhost:8080/logout")
+            .then(response => response.text())
+            .then(data => {
+                alert(data);
+                clearProtectedContent();
+            })
+            .catch(error => {
+                console.error(error);
+                alert("An error occurred");
+            });
+        }
+
+        function loadProtectedContent() {
+            fetch("http://localhost:8080/protected")
+            .then(response => response.text())
+            .then(data => {
+                document.getElementById("protected-content").textContent = data;
+            })
+            .catch(error => {
+                console.error(error);
+                alert("An error occurred");
+            });
+        }
+
+        function clearProtectedContent() {
+            document.getElementById("protected-content").textContent = "";
+        }
+    </script>
+</body>
+</html>
