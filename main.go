@@ -1,18 +1,20 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/base64"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/big"
+	"math/rand"
 	"net/http"
 	"strings"
 	"text/template"
 	"time"
 
-	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/dgrijalva/jwt-go"
+	_ "github.com/lib/pq"
+	"github.com/rs/cors"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Task struct {
@@ -21,59 +23,102 @@ type Task struct {
 	Title    string `json:"title"`
 	Complete bool   `json:"complete"`
 }
-
 type User struct {
+	ID       string `json:"id"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
-type Session struct {
-	ID        string
-	ExpiresAt time.Time
-}
+var db *sql.DB
 
-var sessions = make(map[string]Session)
-
-func generateClientSecret(length int) (string, error) {
-	bytes := make([]byte, length)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		return "", err
-	}
-	encoded := base64.StdEncoding.EncodeToString(bytes)
-	secret := strings.TrimRight(encoded, "=")
-	return secret, nil
-}
-
-func createSession(username string) (string, error) {
-	sessionID, err := generateClientSecret(32)
-	if err != nil {
-		return "", err
-	}
-	expiresAt := time.Now().Add(24 * time.Hour)
-	session := Session{
-		ID:        sessionID,
-		ExpiresAt: expiresAt,
-	}
-	sessions[sessionID] = session
-	return sessionID, nil
-}
-
-func getSession(sessionID string) (Session, bool) {
-	session, ok := sessions[sessionID]
-	return session, ok
-}
-
-func main() {
-	db, err := leveldb.OpenFile("users.db", nil)
+func init() {
+	connStr := "user=postgres password=test dbname=myapp sslmode=disable"
+	var err error
+	db, err = sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+}
+
+func GenerateUserID() string {
+	clientID := rand.Intn(10000000)
+	return fmt.Sprintf("%d", clientID)
+}
+
+func generateClientSecret(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	secret := make([]byte, length)
+	for i := range secret {
+		secret[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(secret), nil
+}
+
+func isTokenValid(tokenString string, secretKey []byte) bool {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unsupported signing method: %v", token.Header["alg"])
+		}
+		return secretKey, nil
+	})
+	if err != nil {
+		fmt.Println("Error parsing token:", err)
+		return false
+	}
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		expirationTime := time.Unix(int64(claims["exp"].(float64)), 0)
+		if expirationTime.Before(time.Now()) {
+			fmt.Println("Token has expired")
+			return false
+		}
+		return true
+	} else {
+		fmt.Println("Invalid token")
+		return false
+	}
+}
+
+func generateJWT(userID, username string) (string, error) {
+	token := jwt.New(jwt.SigningMethodHS256)
+	sampleSecretKey := []byte("test")
+	claims := token.Claims.(jwt.MapClaims)
+	claims["ID"] = userID
+	claims["username"] = username
+	claims["exp"] = time.Now().Add(time.Minute * 30).Unix()
+	tokenString, err := token.SignedString(sampleSecretKey)
+	if err != nil {
+		return "", err
+	}
+	return tokenString, nil
+}
+
+func parseJWT(tokenString string) (string, error) {
+	sampleSecretKey := []byte("test")
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unsupported signing method: %v", token.Header["alg"])
+		}
+		return sampleSecretKey, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		userID := claims["ID"].(string)
+		return userID, nil
+	} else {
+		return "", fmt.Errorf("invalid token")
+	}
+}
+
+func main() {
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders: []string{"Authorization", "Content-Type"},
+	})
+
 	http.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -86,43 +131,43 @@ func main() {
 			return
 		}
 
-		err = db.Put([]byte(user.Username), []byte(user.Password), nil)
+		user.ID = GenerateUserID()
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		if err != nil {
+			http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+			return
+		}
+		user.Password = string(hashedPassword)
+
+		_, err = db.Exec("INSERT INTO users (id, username, password) VALUES ($1, $2, $3)", user.ID, user.Username, user.Password)
 		if err != nil {
 			http.Error(w, "Failed to add user", http.StatusInternalServerError)
 			return
 		}
-		length := 32
-		clientSecret, err := generateClientSecret(length)
-		clientID, err := rand.Int(rand.Reader, big.NewInt(10000000))
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := make(map[string]interface{})
+		resp["user"] = map[string]string{
+			"username": user.Username,
+			"id":       user.ID,
+		}
+		token, err := generateJWT(user.ID, user.Username)
 		if err != nil {
-			fmt.Println("Failed to generate client secret:", err)
+			http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("Generated client secret:", clientSecret)
-		fmt.Println("Generated client ID:", clientID)
-		fmt.Fprintf(w, "User added successfully")
-	})
+		resp["token"] = token
 
-	http.HandleFunc("/show-users", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-		iter := db.NewIterator(nil, nil)
-		defer iter.Release()
-		for iter.Next() {
-			fmt.Fprintf(w, "%s\n", iter.Key())
-			fmt.Fprintf(w, "%s\n", iter.Value())
+		jsonResp, err := json.Marshal(resp)
+		if err != nil {
+			http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
+			return
 		}
-		if err := iter.Error(); err != nil {
-			log.Fatal(err)
-		}
-		fmt.Fprintf(w, "All users")
+
+		w.Write(jsonResp)
 	})
 
 	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -135,81 +180,95 @@ func main() {
 			return
 		}
 
-		value, err := db.Get([]byte(user.Username), nil)
+		row := db.QueryRow("SELECT id, password FROM users WHERE username = $1", user.Username)
+		var dbID, dbPassword string
+		err = row.Scan(&dbID, &dbPassword)
 		if err != nil {
 			http.Error(w, "User does not exist", http.StatusForbidden)
 			return
 		}
 
-		if string(value) != user.Password {
+		err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(user.Password))
+		if err != nil {
 			http.Error(w, "Invalid password", http.StatusForbidden)
 			return
 		}
 
-		sessionID, err := createSession(user.Username)
+		w.Header().Set("Content-Type", "application/json")
+		resp := make(map[string]interface{})
+		resp["user"] = map[string]string{
+			"username": user.Username,
+			"id":       dbID,
+		}
+		token, err := generateJWT(dbID, user.Username)
 		if err != nil {
-			http.Error(w, "Failed to create session", http.StatusInternalServerError)
+			http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
+			return
+		}
+		resp["token"] = token
+
+		jsonResp, err := json.Marshal(resp)
+		if err != nil {
+			http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
 			return
 		}
 
-		cookie := http.Cookie{
-			Name:     "session",
-			Value:    sessionID,
-			Expires:  time.Now().Add(24 * time.Hour),
-			HttpOnly: true,
-		}
-		http.SetCookie(w, &cookie)
-
-		fmt.Fprintf(w, "Logged in successfully")
+		w.Write(jsonResp)
 	})
 
-	http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("session")
-		if err != nil {
-			http.Error(w, "Session not found", http.StatusUnauthorized)
-			return
-		}
-
-		sessionID := cookie.Value
-		_, ok := getSession(sessionID)
-		if !ok {
-			http.Error(w, "Invalid session", http.StatusUnauthorized)
-			return
-		}
-
-		delete(sessions, sessionID)
-
-		cookie = &http.Cookie{
-			Name:    "session",
-			Value:   "",
-			Expires: time.Now(),
-		}
-		http.SetCookie(w, cookie)
-
-		fmt.Fprintf(w, "Logged out successfully")
-	})
-
-	http.HandleFunc("/protected", func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("session")
-		if err != nil {
-			http.Error(w, "Session not found", http.StatusUnauthorized)
-			return
-		}
-
-		sessionID := cookie.Value
-		session, ok := getSession(sessionID)
-		if !ok || session.ExpiresAt.Before(time.Now()) {
-			http.Error(w, "Invalid session", http.StatusUnauthorized)
-			return
-		}
-
-		fmt.Fprintf(w, "Protected content")
-	})
 	http.HandleFunc("/home", func(w http.ResponseWriter, r *http.Request) {
 		tmpl, _ := template.ParseFiles("test_service.html")
 		tmpl.Execute(w, nil)
 	})
 
+	http.HandleFunc("/check-auth", func(w http.ResponseWriter, r *http.Request) {
+		authorizationHeader := r.Header.Get("Authorization")
+		if authorizationHeader == "" {
+			http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
+			return
+		}
+
+		authHeaderParts := strings.Split(authorizationHeader, " ")
+		if len(authHeaderParts) != 2 || authHeaderParts[0] != "Bearer" {
+			http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+			return
+		}
+
+		tokenString := authHeaderParts[1]
+		userID, err := parseJWT(tokenString)
+		if err != nil {
+			http.Error(w, "Invalid JWT token", http.StatusUnauthorized)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := make(map[string]interface{})
+		row := db.QueryRow("SELECT username FROM users WHERE id = $1", userID)
+		var username string
+		err = row.Scan(&username)
+		if err != nil {
+			http.Error(w, "Failed to retrieve username", http.StatusInternalServerError)
+			return
+		}
+		token, err := generateJWT(userID, "")
+		if err != nil {
+			http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
+			return
+		}
+		resp["user"] = map[string]string{
+			"username": username,
+			"id":       userID,
+		}
+		resp["token"] = token
+
+		jsonResp, err := json.Marshal(resp)
+		if err != nil {
+			http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
+			return
+		}
+
+		w.Write(jsonResp)
+	})
 	log.Println("Server started on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", c.Handler(http.DefaultServeMux)))
 }
