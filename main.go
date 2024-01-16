@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"strings"
 	"text/template"
@@ -18,13 +17,14 @@ import (
 )
 
 type Task struct {
-	ID       string `json:"id"`
+	ID       int    `json:"id"`
 	User     string `json:"user"`
 	Title    string `json:"title"`
 	Complete bool   `json:"complete"`
 }
+
 type User struct {
-	ID       string `json:"id"`
+	ID       int    `json:"id"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
@@ -38,20 +38,6 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func GenerateUserID() string {
-	clientID := rand.Intn(10000000)
-	return fmt.Sprintf("%d", clientID)
-}
-
-func generateClientSecret(length int) (string, error) {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	secret := make([]byte, length)
-	for i := range secret {
-		secret[i] = charset[rand.Intn(len(charset))]
-	}
-	return string(secret), nil
 }
 
 func isTokenValid(tokenString string, secretKey []byte) bool {
@@ -131,15 +117,13 @@ func main() {
 			return
 		}
 
-		user.ID = GenerateUserID()
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 		if err != nil {
 			http.Error(w, "Failed to hash password", http.StatusInternalServerError)
 			return
 		}
-		user.Password = string(hashedPassword)
 
-		_, err = db.Exec("INSERT INTO users (id, username, password) VALUES ($1, $2, $3)", user.ID, user.Username, user.Password)
+		err = db.QueryRow("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id", user.Username, string(hashedPassword)).Scan(&user.ID)
 		if err != nil {
 			http.Error(w, "Failed to add user", http.StatusInternalServerError)
 			return
@@ -149,15 +133,16 @@ func main() {
 		resp := make(map[string]interface{})
 		resp["user"] = map[string]string{
 			"username": user.Username,
-			"id":       user.ID,
+			"id":       fmt.Sprintf("%d", user.ID),
 		}
-		token, err := generateJWT(user.ID, user.Username)
+
+		token, err := generateJWT(fmt.Sprintf("%d", user.ID), user.Username)
 		if err != nil {
 			http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
 			return
 		}
-		resp["token"] = token
 
+		resp["token"] = token
 		jsonResp, err := json.Marshal(resp)
 		if err != nil {
 			http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
@@ -181,7 +166,8 @@ func main() {
 		}
 
 		row := db.QueryRow("SELECT id, password FROM users WHERE username = $1", user.Username)
-		var dbID, dbPassword string
+		var dbID int
+		var dbPassword string
 		err = row.Scan(&dbID, &dbPassword)
 		if err != nil {
 			http.Error(w, "User does not exist", http.StatusForbidden)
@@ -198,15 +184,16 @@ func main() {
 		resp := make(map[string]interface{})
 		resp["user"] = map[string]string{
 			"username": user.Username,
-			"id":       dbID,
+			"id":       fmt.Sprintf("%d", dbID),
 		}
-		token, err := generateJWT(dbID, user.Username)
+
+		token, err := generateJWT(fmt.Sprintf("%d", dbID), user.Username)
 		if err != nil {
 			http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
 			return
 		}
-		resp["token"] = token
 
+		resp["token"] = token
 		jsonResp, err := json.Marshal(resp)
 		if err != nil {
 			http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
@@ -243,6 +230,7 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		resp := make(map[string]interface{})
+
 		row := db.QueryRow("SELECT username FROM users WHERE id = $1", userID)
 		var username string
 		err = row.Scan(&username)
@@ -250,17 +238,19 @@ func main() {
 			http.Error(w, "Failed to retrieve username", http.StatusInternalServerError)
 			return
 		}
+
 		token, err := generateJWT(userID, "")
 		if err != nil {
 			http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
 			return
 		}
+
 		resp["user"] = map[string]string{
 			"username": username,
 			"id":       userID,
 		}
-		resp["token"] = token
 
+		resp["token"] = token
 		jsonResp, err := json.Marshal(resp)
 		if err != nil {
 			http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
@@ -269,6 +259,7 @@ func main() {
 
 		w.Write(jsonResp)
 	})
+
 	log.Println("Server started on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", c.Handler(http.DefaultServeMux)))
 }
