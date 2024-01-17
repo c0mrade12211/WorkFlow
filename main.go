@@ -10,6 +10,7 @@ import (
 	"text/template"
 
 	jwt_service "todo/jwt"
+	"todo/models"
 	lib "todo/userslib"
 
 	"github.com/gorilla/mux"
@@ -17,22 +18,6 @@ import (
 	"github.com/rs/cors"
 	"golang.org/x/crypto/bcrypt"
 )
-
-type Task struct {
-	Creator     string `json:"creator"`
-	Description string `json:"description"`
-	Title       string `json:"title"`
-	ID          string `json:"id"`
-	IsComplete  string `json:"iscomplete"`
-	CreatedAt   string `json:"created_at"`
-	UserID      string `json:"userid"`
-}
-
-type User struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
 
 var db *sql.DB
 
@@ -57,7 +42,7 @@ func main() {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var user User
+		var user models.User
 		err := json.NewDecoder(r.Body).Decode(&user)
 		if err != nil {
 			http.Error(w, "Invalid request payload", http.StatusBadRequest)
@@ -97,7 +82,7 @@ func main() {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var user User
+		var user models.User
 		err := json.NewDecoder(r.Body).Decode(&user)
 		if err != nil {
 			http.Error(w, "Invalid request payload", http.StatusBadRequest)
@@ -154,7 +139,7 @@ func main() {
 			http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
 			return
 		}
-		var task Task
+		var task models.Task
 		err := json.NewDecoder(r.Body).Decode(&task)
 		if err != nil {
 			http.Error(w, "Invalid request payload", http.StatusBadRequest)
