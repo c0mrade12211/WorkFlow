@@ -7,18 +7,47 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	jwt_service "todo/jwt"
-	"todo/models"
-	lib "todo/userslib"
+	"time"
 
-	_ "github.com/lib/pq"
+	jwt_service "todo/jwt"
+
+	"todo/models"
 
 	"github.com/gorilla/mux"
+	_ "github.com/lib/pq"
 	"github.com/rs/cors"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var db *sql.DB
+
+func GetTasksByUserID(userID string) ([]map[string]interface{}, error) {
+	rows, err := db.Query("SELECT id, created_at, description, title FROM tasks WHERE userid = $1 ORDER BY created_at DESC", userID)
+	if err != nil {
+		fmt.Println("Error querying tasks:", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	tasks := []map[string]interface{}{}
+	for rows.Next() {
+		var taskID, taskCreatedAt, taskDescription, title interface{}
+		err := rows.Scan(&taskID, &taskCreatedAt, &taskDescription, &title)
+		if err != nil {
+			fmt.Println("Error scanning task:", err)
+			return nil, err
+		}
+		task := map[string]interface{}{
+			"id":          taskID,
+			"title":       title,
+			"created_at":  taskCreatedAt,
+			"description": taskDescription,
+		}
+		tasks = append(tasks, task)
+	}
+
+	return tasks, nil
+}
 
 func init() {
 	connStr := "user=postgres password=test dbname=myapp sslmode=disable"
@@ -31,37 +60,79 @@ func init() {
 
 func main() {
 	r := mux.NewRouter()
-
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://192.168.0.153:5173"},
+		AllowedOrigins:   []string{"https://6800-95-26-28-58.ngrok-free.app"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
 	})
-
 	r.HandleFunc("/register", registerHandler).Methods("POST")
 	r.HandleFunc("/login", loginHandler).Methods("POST")
+	r.HandleFunc("/get-me", getProfileHandler).Methods("GET")
 	r.HandleFunc("/create-task", createTaskHandler).Methods("POST")
-	r.HandleFunc("/show-tasks", showTasksHandler).Methods("GET")
+	r.HandleFunc("/delete-task/{id}", deleteTaskHandler).Methods("DELETE")
 	r.HandleFunc("/check-auth", checkAuthHandler).Methods("GET")
-
 	log.Println("Server started on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", c.Handler(r)))
 }
+func getProfileHandler(w http.ResponseWriter, r *http.Request) {
+	authorizationHeader := r.Header.Get("Authorization")
+	if authorizationHeader == "" {
+		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
+		return
+	}
+	authHeaderParts := strings.Split(authorizationHeader, " ")
+	if len(authHeaderParts) != 2 || authHeaderParts[0] != "Bearer" {
+		http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+		return
+	}
+	tokenString := authHeaderParts[1]
+	userID, err := jwt_service.ParseJWT(tokenString)
+	if err != nil {
+		http.Error(w, "Invalid JWT token", http.StatusUnauthorized)
+		return
+	}
+	tasks, err := GetTasksByUserID(userID)
+	if err != nil {
+		http.Error(w, "Failed to get tasks", http.StatusInternalServerError)
+		return
+	}
+	row := db.QueryRow("SELECT username FROM users WHERE id = $1", userID)
+	var username string
+	err = row.Scan(&username)
+	if err != nil {
+		http.Error(w, "User does not exist", http.StatusForbidden)
+		return
+	}
+	resp := map[string]interface{}{
+		"user": map[string]interface{}{
+			"username": username,
+			"id":       userID,
+			"tasks":    tasks,
+		},
+	}
+	jsonResp, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonResp)
+}
 func registerHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "https://6800-95-26-28-58.ngrok-free.app")
+
 	var user models.User
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
 		return
 	}
-
 	err = db.QueryRow("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id", user.Username, string(hashedPassword)).Scan(&user.ID)
 	if err != nil {
 		fmt.Println(err)
@@ -70,18 +141,17 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	resp := make(map[string]interface{})
-	resp["user"] = map[string]string{
-		"username": user.Username,
-		"id":       fmt.Sprintf("%d", user.ID),
+	resp := map[string]interface{}{
+		"user": map[string]string{
+			"username": user.Username,
+			"id":       fmt.Sprintf("%d", user.ID),
+		},
 	}
-
 	token, err := jwt_service.GenerateJWT(fmt.Sprintf("%d", user.ID), user.Username)
 	if err != nil {
 		http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
 		return
 	}
-
 	resp["token"] = token
 	jsonResp, err := json.Marshal(resp)
 	if err != nil {
@@ -93,13 +163,14 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "https://6800-95-26-28-58.ngrok-free.app")
+
 	var user models.User
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-
 	row := db.QueryRow("SELECT id, password FROM users WHERE username = $1", user.Username)
 	var dbID int
 	var dbPassword string
@@ -108,32 +179,38 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "User does not exist", http.StatusForbidden)
 		return
 	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(user.Password))
+	tasks, err := GetTasksByUserID(fmt.Sprintf("%d", dbID))
 	if err != nil {
-		http.Error(w, "Invalid password", http.StatusForbidden)
+		http.Error(w, "Failed to get tasks", http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-	resp := make(map[string]interface{})
-	resp["user"] = map[string]string{
-		"username": user.Username,
-		"id":       fmt.Sprintf("%d", dbID),
+	resp := map[string]interface{}{
+		"user": map[string]interface{}{
+			"username": user.Username,
+			"id":       fmt.Sprintf("%d", dbID),
+			"tasks":    tasks,
+		},
 	}
-
 	token, err := jwt_service.GenerateJWT(fmt.Sprintf("%d", dbID), user.Username)
 	if err != nil {
 		http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
 		return
 	}
-
 	resp["token"] = token
 	jsonResp, err := json.Marshal(resp)
 	if err != nil {
 		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
 		return
 	}
+	cookie := &http.Cookie{
+		Name:     "jwt",
+		Value:    token,
+		Expires:  time.Now().Add(24 * time.Hour),
+		HttpOnly: true,
+	}
+
+	http.SetCookie(w, cookie)
 
 	w.Write(jsonResp)
 }
@@ -172,45 +249,38 @@ func createTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row := db.QueryRow("SELECT created_at, id, iscomplete FROM tasks WHERE userid = $1", userID)
+	row := db.QueryRow("SELECT created_at, id FROM tasks WHERE userid = $1 ORDER BY created_at DESC LIMIT 1", userID)
 	var createdAt string
 	var dbID int
-	var isComplete bool
-	err = row.Scan(&createdAt, &dbID, &isComplete)
+	err = row.Scan(&createdAt, &dbID)
 	if err != nil {
 		http.Error(w, "Error retrieving task", http.StatusInternalServerError)
 		return
 	}
 
-	rowUsername := db.QueryRow("SELECT username FROM users WHERE id = $1", userID)
-	var username string
-	err = rowUsername.Scan(&username)
-	if err != nil {
-		http.Error(w, "Failed to retrieve username", http.StatusInternalServerError)
-		return
+	resp := map[string]interface{}{
+		"user": map[string]interface{}{
+			"username": "",
+			"id":       fmt.Sprintf("%d", userID),
+			"tasks": []map[string]interface{}{
+				{
+					"created_at":  createdAt,
+					"description": task.Description,
+					"id":          dbID,
+				},
+			},
+		},
 	}
-
-	resp := make(map[string]interface{})
-	resp["user"] = map[string]string{
-		"username": username,
-		"id":       fmt.Sprintf("%d", userID),
-	}
-	resp["task_id"] = dbID
-	resp["title"] = task.Title
-	resp["description"] = task.Description
-	resp["created_at"] = createdAt
-	resp["is_complete"] = isComplete
 
 	jsonResp, err := json.Marshal(resp)
 	if err != nil {
 		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
 		return
 	}
-
 	w.Write(jsonResp)
 }
 
-func showTasksHandler(w http.ResponseWriter, r *http.Request) {
+func deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
 	authorizationHeader := r.Header.Get("Authorization")
 	if authorizationHeader == "" {
 		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
@@ -223,22 +293,24 @@ func showTasksHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	params := mux.Vars(r)
+	taskID := params["id"]
+
 	tokenString := authHeaderParts[1]
 	userID, err := jwt_service.ParseJWT(tokenString)
 	if err != nil {
-		http.Error(w, "Failed to parse JWT token", http.StatusUnauthorized)
+		http.Error(w, "Invalid JWT token", http.StatusUnauthorized)
 		return
 	}
 
-	jsonData, err := lib.GetTasksByUserID(userID)
+	_, err = db.Exec("DELETE FROM tasks WHERE id = $1 AND userid = $2", taskID, userID)
 	if err != nil {
-		http.Error(w, "Failed to get tasks", http.StatusInternalServerError)
+		http.Error(w, "Failed to delete task", http.StatusInternalServerError)
 		fmt.Println(err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonData)
+	w.WriteHeader(http.StatusOK)
 }
 
 func checkAuthHandler(w http.ResponseWriter, r *http.Request) {
@@ -261,25 +333,25 @@ func checkAuthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	resp := make(map[string]interface{})
-	row := db.QueryRow("SELECT username FROM users WHERE id = $1", userID)
-	var username string
-	err = row.Scan(&username)
+	tasks, err := GetTasksByUserID(fmt.Sprintf("%d", userID))
 	if err != nil {
-		http.Error(w, "Failed to retrieve username", http.StatusInternalServerError)
+		http.Error(w, "Failed to get tasks", http.StatusInternalServerError)
 		return
 	}
 
-	token, err := jwt_service.GenerateJWT(userID, "")
+	w.Header().Set("Content-Type", "application/json")
+	resp := map[string]interface{}{
+		"user": map[string]interface{}{
+			"username": "",
+			"id":       fmt.Sprintf("%d", userID),
+			"tasks":    tasks,
+		},
+	}
+
+	token, err := jwt_service.GenerateJWT(fmt.Sprintf("%d", userID), "")
 	if err != nil {
 		http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
 		return
-	}
-
-	resp["user"] = map[string]string{
-		"username": username,
-		"id":       userID,
 	}
 	resp["token"] = token
 
@@ -288,6 +360,5 @@ func checkAuthHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
 		return
 	}
-
 	w.Write(jsonResp)
 }
