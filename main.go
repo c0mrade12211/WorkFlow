@@ -61,7 +61,7 @@ func init() {
 func main() {
 	r := mux.NewRouter()
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"https://6800-95-26-28-58.ngrok-free.app"},
+		AllowedOrigins:   []string{"https://7078-95-26-28-58.ngrok-free.app"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
@@ -72,9 +72,115 @@ func main() {
 	r.HandleFunc("/create-task", createTaskHandler).Methods("POST")
 	r.HandleFunc("/delete-task/{id}", deleteTaskHandler).Methods("DELETE")
 	r.HandleFunc("/check-auth", checkAuthHandler).Methods("GET")
+	r.HandleFunc("/shop", shopHandler).Methods("GET")
+	r.HandleFunc("/buy/{id}", buyHandler).Methods("POST")
 	log.Println("Server started on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", c.Handler(r)))
 }
+
+func buyHandler(w http.ResponseWriter, r *http.Request) {
+	authorizationHeader := r.Header.Get("Authorization")
+	if authorizationHeader == "" {
+		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
+		return
+	}
+	authHeaderParts := strings.Split(authorizationHeader, " ")
+	if len(authHeaderParts) != 2 || authHeaderParts[0] != "Bearer" {
+		http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+		return
+	}
+	tokenString := authHeaderParts[1]
+	userID, err := jwt_service.ParseJWT(tokenString)
+	if err != nil {
+		http.Error(w, "Invalid JWT token", http.StatusUnauthorized)
+		return
+	}
+	row_user_balance := db.QueryRow("SELECT balance FROM users WHERE id = $1", userID)
+	var user_balance int
+	err = row_user_balance.Scan(&user_balance)
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Failed to get user balance", http.StatusInternalServerError)
+		return
+	}
+	params := mux.Vars(r)
+	itemID := params["id"]
+	row_item := db.QueryRow("SELECT price FROM items WHERE id = $1", itemID)
+	var itemPrice int
+	err = row_item.Scan(&itemPrice)
+	if err != nil {
+		http.Error(w, "Failed to get item price", http.StatusInternalServerError)
+		return
+	}
+	if itemPrice > user_balance {
+		http.Error(w, "Insufficient balance", http.StatusForbidden)
+		return
+	}
+	updateUserbalance, err := db.Exec("UPDATE users SET balance = balance - $1 WHERE id = $2", itemPrice, userID)
+	if err != nil {
+		http.Error(w, "Failed to update user balance", http.StatusInternalServerError)
+		return
+	}
+	rowsAffected, err := updateUserbalance.RowsAffected()
+	if err != nil {
+		http.Error(w, "Failed to get number of rows affected", http.StatusInternalServerError)
+		return
+	}
+	if rowsAffected == 0 {
+		http.Error(w, "Failed to update user balance", http.StatusInternalServerError)
+		return
+	}
+	_, err = db.Exec("INSERT INTO buyuserinfo (userid, itemid) VALUES ($1, $2)", userID, itemID)
+	if err != nil {
+		http.Error(w, "Failed to insert user item", http.StatusInternalServerError)
+		return
+	}
+	w.Write([]byte("OK"))
+}
+func shopHandler(w http.ResponseWriter, r *http.Request) {
+	authorizationHeader := r.Header.Get("Authorization")
+	if authorizationHeader == "" {
+		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
+		return
+	}
+	authHeaderParts := strings.Split(authorizationHeader, " ")
+	if len(authHeaderParts) != 2 || authHeaderParts[0] != "Bearer" {
+		http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+		return
+	}
+	tokenString := authHeaderParts[1]
+	userID, err := jwt_service.ParseJWT(tokenString)
+	if err != nil {
+		http.Error(w, "Invalid JWT token", http.StatusUnauthorized)
+		return
+	}
+	fmt.Println(userID)
+	row := db.QueryRow("SELECT id, price, description, title FROM items")
+	var idItem int
+	var PriceItem int
+	var DescriptionItem string
+	var TitleItem string
+
+	err = row.Scan(&idItem, &PriceItem, &DescriptionItem, &TitleItem)
+	if err != nil {
+		http.Error(w, "User does not exist", http.StatusForbidden)
+		return
+	}
+	item := map[string]interface{}{
+		"id":          idItem,
+		"price":       PriceItem,
+		"description": DescriptionItem,
+		"title":       TitleItem,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	jsonResp, err := json.Marshal(item)
+	if err != nil {
+		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
+		return
+	}
+	w.Write(jsonResp)
+}
+
 func getProfileHandler(w http.ResponseWriter, r *http.Request) {
 	authorizationHeader := r.Header.Get("Authorization")
 	if authorizationHeader == "" {
@@ -120,7 +226,7 @@ func getProfileHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonResp)
 }
 func registerHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "https://6800-95-26-28-58.ngrok-free.app")
+	w.Header().Set("Access-Control-Allow-Origin", "https://7078-95-26-28-58.ngrok-free.app")
 
 	var user models.User
 	err := json.NewDecoder(r.Body).Decode(&user)
@@ -163,7 +269,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "https://6800-95-26-28-58.ngrok-free.app")
+	w.Header().Set("Access-Control-Allow-Origin", "https://7078-95-26-28-58.ngrok-free.app")
 
 	var user models.User
 	err := json.NewDecoder(r.Body).Decode(&user)
