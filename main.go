@@ -7,16 +7,15 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
-
-	jwt_service "todo/jwt"
-
-	"todo/models"
 
 	"github.com/gorilla/mux"
-	_ "github.com/lib/pq"
 	"github.com/rs/cors"
 	"golang.org/x/crypto/bcrypt"
+
+	jwt_service "todo/jwt"
+	"todo/models"
+
+	_ "github.com/lib/pq"
 )
 
 var db *sql.DB
@@ -37,6 +36,7 @@ func GetTasksByUserID(userID string) ([]map[string]interface{}, error) {
 			fmt.Println("Error scanning task:", err)
 			return nil, err
 		}
+
 		task := map[string]interface{}{
 			"id":          taskID,
 			"title":       title,
@@ -60,12 +60,14 @@ func init() {
 
 func main() {
 	r := mux.NewRouter()
+
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"https://7078-95-26-28-58.ngrok-free.app"},
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedOrigins:   []string{"https://e395-87-244-58-26.ngrok-free.app"},
+		AllowedMethods:   []string{"GET", "POST", "OPTIONS", "DELETE"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
 	})
+
 	r.HandleFunc("/register", registerHandler).Methods("POST")
 	r.HandleFunc("/login", loginHandler).Methods("POST")
 	r.HandleFunc("/get-me", getProfileHandler).Methods("GET")
@@ -74,110 +76,192 @@ func main() {
 	r.HandleFunc("/check-auth", checkAuthHandler).Methods("GET")
 	r.HandleFunc("/shop", shopHandler).Methods("GET")
 	r.HandleFunc("/buy/{id}", buyHandler).Methods("POST")
+	r.HandleFunc("/my-subdivision", getTasksInSubdivisionHandler).Methods("GET")
+
 	log.Println("Server started on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", c.Handler(r)))
 }
+func getTasksInSubdivisionHandler(w http.ResponseWriter, r *http.Request) {
+	authorizationHeader := r.Header.Get("Authorization")
+	if authorizationHeader == "" {
+		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
+		return
+	}
+	authHeaderParts := strings.Split(authorizationHeader, " ")
+	if len(authHeaderParts) != 2 || authHeaderParts[0] != "Bearer" {
+		http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+		return
+	}
+	tokenString := authHeaderParts[1]
+	userID, err := jwt_service.ParseJWT(tokenString)
+	if err != nil {
+		http.Error(w, "Invalid JWT token", http.StatusUnauthorized)
+		return
+	}
 
+	rows, err := db.Query(`
+		SELECT tasks.id, tasks.created_at, tasks.description, tasks.title, users.subdivision
+		FROM tasks
+		INNER JOIN users ON tasks.userid = users.id
+		WHERE users.id = $1 OR users.subdivision = (SELECT subdivision FROM users WHERE id = $1)
+		ORDER BY tasks.created_at DESC`, userID)
+	if err != nil {
+		http.Error(w, "Failed to get tasks", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	tasks := []map[string]interface{}{}
+	for rows.Next() {
+		var taskID, taskCreatedAt, taskDescription, taskTitle, taskSubdivision interface{}
+		err := rows.Scan(&taskID, &taskCreatedAt, &taskDescription, &taskTitle, &taskSubdivision)
+		if err != nil {
+			http.Error(w, "Failed to scan task", http.StatusInternalServerError)
+			return
+		}
+
+		task := map[string]interface{}{
+			"id":          taskID,
+			"created_at":  taskCreatedAt,
+			"description": taskDescription,
+			"title":       taskTitle,
+		}
+
+		if taskSubdivision != nil {
+			task["subdivision"] = taskSubdivision.(string)
+		} else {
+			task["subdivision"] = ""
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	jsonResp, err := json.Marshal(tasks)
+	if err != nil {
+		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonResp)
+}
 func buyHandler(w http.ResponseWriter, r *http.Request) {
 	authorizationHeader := r.Header.Get("Authorization")
 	if authorizationHeader == "" {
 		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
 		return
 	}
+
 	authHeaderParts := strings.Split(authorizationHeader, " ")
 	if len(authHeaderParts) != 2 || authHeaderParts[0] != "Bearer" {
 		http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
 		return
 	}
+
 	tokenString := authHeaderParts[1]
 	userID, err := jwt_service.ParseJWT(tokenString)
 	if err != nil {
 		http.Error(w, "Invalid JWT token", http.StatusUnauthorized)
 		return
 	}
-	row_user_balance := db.QueryRow("SELECT balance FROM users WHERE id = $1", userID)
-	var user_balance int
-	err = row_user_balance.Scan(&user_balance)
+
+	rowUserBalance := db.QueryRow("SELECT balance FROM users WHERE id = $1", userID)
+	var userBalance int
+	err = rowUserBalance.Scan(&userBalance)
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, "Failed to get user balance", http.StatusInternalServerError)
 		return
 	}
+
 	params := mux.Vars(r)
 	itemID := params["id"]
-	row_item := db.QueryRow("SELECT price FROM items WHERE id = $1", itemID)
+	rowItem := db.QueryRow("SELECT price FROM items WHERE id = $1", itemID)
 	var itemPrice int
-	err = row_item.Scan(&itemPrice)
+	err = rowItem.Scan(&itemPrice)
 	if err != nil {
 		http.Error(w, "Failed to get item price", http.StatusInternalServerError)
 		return
 	}
-	if itemPrice > user_balance {
+
+	if itemPrice > userBalance {
 		http.Error(w, "Insufficient balance", http.StatusForbidden)
 		return
 	}
-	updateUserbalance, err := db.Exec("UPDATE users SET balance = balance - $1 WHERE id = $2", itemPrice, userID)
+
+	updateUserBalance, err := db.Exec("UPDATE users SET balance = balance - $1 WHERE id = $2", itemPrice, userID)
 	if err != nil {
 		http.Error(w, "Failed to update user balance", http.StatusInternalServerError)
 		return
 	}
-	rowsAffected, err := updateUserbalance.RowsAffected()
+
+	rowsAffected, err := updateUserBalance.RowsAffected()
 	if err != nil {
 		http.Error(w, "Failed to get number of rows affected", http.StatusInternalServerError)
 		return
 	}
+
 	if rowsAffected == 0 {
 		http.Error(w, "Failed to update user balance", http.StatusInternalServerError)
 		return
 	}
+
 	_, err = db.Exec("INSERT INTO buyuserinfo (userid, itemid) VALUES ($1, $2)", userID, itemID)
 	if err != nil {
 		http.Error(w, "Failed to insert user item", http.StatusInternalServerError)
 		return
 	}
+
 	w.Write([]byte("OK"))
 }
+
 func shopHandler(w http.ResponseWriter, r *http.Request) {
 	authorizationHeader := r.Header.Get("Authorization")
 	if authorizationHeader == "" {
 		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
 		return
 	}
+
 	authHeaderParts := strings.Split(authorizationHeader, " ")
 	if len(authHeaderParts) != 2 || authHeaderParts[0] != "Bearer" {
 		http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
 		return
 	}
+
 	tokenString := authHeaderParts[1]
 	userID, err := jwt_service.ParseJWT(tokenString)
 	if err != nil {
 		http.Error(w, "Invalid JWT token", http.StatusUnauthorized)
 		return
 	}
+
 	fmt.Println(userID)
+
 	row := db.QueryRow("SELECT id, price, description, title FROM items")
 	var idItem int
-	var PriceItem int
-	var DescriptionItem string
-	var TitleItem string
-
-	err = row.Scan(&idItem, &PriceItem, &DescriptionItem, &TitleItem)
+	var priceItem int
+	var descriptionItem string
+	var titleItem string
+	err = row.Scan(&idItem, &priceItem, &descriptionItem, &titleItem)
 	if err != nil {
 		http.Error(w, "User does not exist", http.StatusForbidden)
 		return
 	}
+
 	item := map[string]interface{}{
 		"id":          idItem,
-		"price":       PriceItem,
-		"description": DescriptionItem,
-		"title":       TitleItem,
+		"price":       priceItem,
+		"description": descriptionItem,
+		"title":       titleItem,
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	jsonResp, err := json.Marshal(item)
 	if err != nil {
 		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
 		return
 	}
+
 	w.Write(jsonResp)
 }
 
@@ -187,46 +271,55 @@ func getProfileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
 		return
 	}
+
 	authHeaderParts := strings.Split(authorizationHeader, " ")
 	if len(authHeaderParts) != 2 || authHeaderParts[0] != "Bearer" {
 		http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
 		return
 	}
+
 	tokenString := authHeaderParts[1]
 	userID, err := jwt_service.ParseJWT(tokenString)
 	if err != nil {
 		http.Error(w, "Invalid JWT token", http.StatusUnauthorized)
 		return
 	}
+
 	tasks, err := GetTasksByUserID(userID)
 	if err != nil {
 		http.Error(w, "Failed to get tasks", http.StatusInternalServerError)
 		return
 	}
-	row := db.QueryRow("SELECT username FROM users WHERE id = $1", userID)
+
+	row := db.QueryRow("SELECT username, balance FROM users WHERE id = $1", userID)
 	var username string
-	err = row.Scan(&username)
+	var balance int
+	err = row.Scan(&username, &balance)
 	if err != nil {
 		http.Error(w, "User does not exist", http.StatusForbidden)
 		return
 	}
+
 	resp := map[string]interface{}{
 		"user": map[string]interface{}{
 			"username": username,
 			"id":       userID,
 			"tasks":    tasks,
+			"balance":  balance,
 		},
 	}
+
 	jsonResp, err := json.Marshal(resp)
 	if err != nil {
 		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonResp)
 }
+
 func registerHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "https://7078-95-26-28-58.ngrok-free.app")
 
 	var user models.User
 	err := json.NewDecoder(r.Body).Decode(&user)
@@ -234,30 +327,36 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
 		return
 	}
-	err = db.QueryRow("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id", user.Username, string(hashedPassword)).Scan(&user.ID)
+
+	err = db.QueryRow("INSERT INTO users (username, password, subdivision) VALUES ($1, $2, $3) RETURNING id", user.Username, string(hashedPassword), user.Subdivision).Scan(&user.ID)
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, "Failed to add user", http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
+	tasks := []interface{}{}
 	resp := map[string]interface{}{
-		"user": map[string]string{
+		"user": map[string]interface{}{
 			"username": user.Username,
 			"id":       fmt.Sprintf("%d", user.ID),
+			"tasks":    tasks,
+			"balance":  "0",
 		},
 	}
+
 	token, err := jwt_service.GenerateJWT(fmt.Sprintf("%d", user.ID), user.Username)
 	if err != nil {
 		http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
 		return
 	}
+
 	resp["token"] = token
 	jsonResp, err := json.Marshal(resp)
 	if err != nil {
@@ -269,56 +368,52 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "https://7078-95-26-28-58.ngrok-free.app")
-
 	var user models.User
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-	row := db.QueryRow("SELECT id, password FROM users WHERE username = $1", user.Username)
-	var dbID int
+	row := db.QueryRow("SELECT id, password, balance FROM users WHERE username = $1", user.Username)
+	var userID int
 	var dbPassword string
-	err = row.Scan(&dbID, &dbPassword)
+	var balance int
+	err = row.Scan(&userID, &dbPassword, &balance)
 	if err != nil {
 		http.Error(w, "User does not exist", http.StatusForbidden)
 		return
 	}
-	tasks, err := GetTasksByUserID(fmt.Sprintf("%d", dbID))
+
+	err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(user.Password))
+	if err != nil {
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	tasks, err := GetTasksByUserID(fmt.Sprintf("%d", userID))
 	if err != nil {
 		http.Error(w, "Failed to get tasks", http.StatusInternalServerError)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
-	resp := map[string]interface{}{
-		"user": map[string]interface{}{
-			"username": user.Username,
-			"id":       fmt.Sprintf("%d", dbID),
-			"tasks":    tasks,
-		},
-	}
-	token, err := jwt_service.GenerateJWT(fmt.Sprintf("%d", dbID), user.Username)
+	token, err := jwt_service.GenerateJWT(fmt.Sprintf("%d", userID), "")
 	if err != nil {
 		http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
 		return
 	}
-	resp["token"] = token
-	jsonResp, err := json.Marshal(resp)
-	if err != nil {
-		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
-		return
-	}
-	cookie := &http.Cookie{
-		Name:     "jwt",
-		Value:    token,
-		Expires:  time.Now().Add(24 * time.Hour),
-		HttpOnly: true,
+
+	resp := map[string]interface{}{
+		"user": map[string]interface{}{
+			"username": user.Username,
+			"id":       fmt.Sprintf("%d", userID),
+			"tasks":    tasks,
+			"balance":  balance,
+		},
+		"token": token,
 	}
 
-	http.SetCookie(w, cookie)
-
-	w.Write(jsonResp)
+	json.NewEncoder(w).Encode(resp)
 }
 
 func createTaskHandler(w http.ResponseWriter, r *http.Request) {
@@ -367,7 +462,7 @@ func createTaskHandler(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]interface{}{
 		"user": map[string]interface{}{
 			"username": "",
-			"id":       fmt.Sprintf("%d", userID),
+			"id":       userID,
 			"tasks": []map[string]interface{}{
 				{
 					"created_at":  createdAt,
@@ -383,6 +478,7 @@ func createTaskHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
 		return
 	}
+
 	w.Write(jsonResp)
 }
 
@@ -401,7 +497,6 @@ func deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	params := mux.Vars(r)
 	taskID := params["id"]
-
 	tokenString := authHeaderParts[1]
 	userID, err := jwt_service.ParseJWT(tokenString)
 	if err != nil {
@@ -459,12 +554,13 @@ func checkAuthHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to generate JWT", http.StatusInternalServerError)
 		return
 	}
-	resp["token"] = token
 
+	resp["token"] = token
 	jsonResp, err := json.Marshal(resp)
 	if err != nil {
 		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
 		return
 	}
+
 	w.Write(jsonResp)
 }
