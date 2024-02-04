@@ -54,44 +54,29 @@ func main() {
 	r := mux.NewRouter()
 
 	c := cors.New(cors.Options{
-<<<<<<< HEAD
 		AllowedOrigins:   []string{"https://532d-95-26-26-242.ngrok-free.app"},
-=======
-		AllowedOrigins:   []string{"https://e395-87-244-58-26.ngrok-free.app"},
->>>>>>> 120ebd7a25d59279905e416eea67a18cbcaed647
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS", "DELETE"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
 	})
 
 	r.HandleFunc("/register", handlers.WithDB(handlers.RegisterHandler, db)).Methods("POST")
-<<<<<<< HEAD
 	r.HandleFunc("/my-items", handlers.WithDB(handlers.MyItems, db)).Methods("GET")
 	r.HandleFunc("/request-invite/{subdiv_id}", handlers.WithDB(handlers.RequestForInvite, db)).Methods("GET")
 	r.HandleFunc("/use-my-item/{id}", handlers.WithDB(handlers.UseMyItem, db)).Methods("DELETE")
 	r.HandleFunc("/all-subdivisions", handlers.WithDB(handlers.ShowSubdivisions, db)).Methods("GET")
-=======
->>>>>>> 120ebd7a25d59279905e416eea67a18cbcaed647
 	r.HandleFunc("/login", handlers.WithDB(handlers.LoginHandler, db)).Methods("POST")
 	r.HandleFunc("/get-me", handlers.WithDB(handlers.GetProfileHandler, db)).Methods("GET")
 	r.HandleFunc("/create-task", handlers.WithDB(handlers.CreateTaskHandler, db)).Methods("POST")
 	r.HandleFunc("/delete-task/{id}", handlers.WithDB(handlers.DeleteTaskHandler, db)).Methods("DELETE")
 	r.HandleFunc("/check-auth", handlers.WithDB(handlers.CheckAuthHandler, db)).Methods("GET")
 	r.HandleFunc("/shop", handlers.WithDB(handlers.ShopHandler, db)).Methods("GET")
-<<<<<<< HEAD
 	r.HandleFunc("/buy/{id}", handlers.WithDB(handlers.BuyHandler, db)).Methods("GET")
 	r.HandleFunc("/create-item", handlers.WithDB(handlers.CreateItem, db)).Methods("POST")
 	r.HandleFunc("/my-subdivision", handlers.WithDB(handlers.GetTasksInSubdivisionHandler, db)).Methods("GET")
 	r.HandleFunc("/change-task/{id}", handlers.WithDB(handlers.ChangeStatus, db)).Methods("GET")
 	r.HandleFunc("/my-tasks", handlers.WithDB(handlers.MyTasksHandler, db)).Methods("GET")
 	r.HandleFunc("/invited-list", handlers.WithDB(handlers.InvitedList, db)).Methods("GET")
-=======
-	r.HandleFunc("/buy/{id}", handlers.WithDB(handlers.BuyHandler, db)).Methods("POST")
-
-	r.HandleFunc("/my-subdivision", handlers.WithDB(handlers.GetTasksInSubdivisionHandler, db)).Methods("GET")
-
-	r.HandleFunc("/my-tasks", handlers.WithDB(handlers.MyTasksHandler, db)).Methods("GET")
->>>>>>> 120ebd7a25d59279905e416eea67a18cbcaed647
 
 	log.Println("Server started on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", c.Handler(r)))
