@@ -27,8 +27,8 @@ WorkFlow is a web service developed using React and Golang, designed to enhance 
 - Frontend
   You're need to clone this repository and complete installation (https://github.com/bombasters/frontend_workflow/tree/master)
 - BACKEND
-6. Run the server:
-go run main.go
+  Run the server:
+  go run main.go
 7. Start the frontend:
 Changed CORS on you're frontend-server
 
