@@ -15,12 +15,14 @@ WorkFlow is a web service developed using React and Golang, designed to enhance 
 
 ## Requirements
 
-- Node.js (version X.X.X)
-- Golang 
-- PostgreSQL (15 version)
+- Node.js (version 18+)
+- Golang (version X.X.X)
+- PostgreSQL (15 version
+- React ^18.2.0
+- React Redux ^9.1.0
+- TypeScript ^5.2.2
 
 ## Installation and Setup
-
 6. Run the server:
 go run main.go
 7. Start the frontend:
