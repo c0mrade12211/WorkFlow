@@ -37,7 +37,7 @@ If you would like to contribute to the development of WorkFlow, you can:
 
 ## License
 
-WorkFlow is licensed under the MIT License. For more information, please refer to the [LICENSE](/path/to/LICENSE) file.
+WorkFlow is licensed under the MIT License. For more information, please refer to the [LICENSE](https://github.com/c0mrade12211/xtracker-backend/blob/main/LICENSE) file.
 
 ## Contact
 
