@@ -1,51 +1,33 @@
-package test
+package userslib
 
 import (
 	"database/sql"
-	"encoding/json"
+	"fmt"
 )
 
-var db *sql.DB
-
-func GetTasksByUserID(userID string) ([]byte, error) {
-	rows, err := db.Query("SELECT id, title, iscomplete, created_at, description, userid FROM tasks WHERE userid = $1", userID)
+func GetTasksByUserID(db *sql.DB, userID string) ([]map[string]interface{}, error) {
+	rows, err := db.Query("SELECT id, created_at, description, title, iscomplete FROM tasks WHERE userid = $1 ORDER BY created_at DESC", userID)
 	if err != nil {
+		fmt.Println("Error querying tasks:", err)
 		return nil, err
 	}
 	defer rows.Close()
-	rowUsername := db.QueryRow("SELECT username FROM users WHERE id = $1", userID)
-	var username string
-	err = rowUsername.Scan(&username)
-	if err != nil {
-		return nil, err
-	}
-	resp := make(map[string]interface{})
-	resp["user"] = map[string]string{
-		"username": username,
-		"userid":   userID,
-	}
 	tasks := []map[string]interface{}{}
 	for rows.Next() {
-		var task map[string]interface{}
-		var taskID, taskTitle, taskIsComplete, taskCreatedAt, taskDescription, taskUserID interface{}
-		err := rows.Scan(&taskID, &taskTitle, &taskIsComplete, &taskCreatedAt, &taskDescription, &taskUserID)
+		var taskID, taskCreatedAt, taskDescription, title, iscomplete interface{}
+		err := rows.Scan(&taskID, &taskCreatedAt, &taskDescription, &title, &iscomplete)
 		if err != nil {
+			fmt.Println("Error scanning task:", err)
 			return nil, err
 		}
-		task = make(map[string]interface{})
-		task["id"] = taskID
-		task["title"] = taskTitle
-		task["iscomplete"] = taskIsComplete
-		task["created_at"] = taskCreatedAt
-		task["description"] = taskDescription
-		task["userid"] = taskUserID
-		task["username"] = username
+		task := map[string]interface{}{
+			"id":          taskID,
+			"title":       title,
+			"created_at":  taskCreatedAt,
+			"description": taskDescription,
+			"iscomplete":  iscomplete,
+		}
 		tasks = append(tasks, task)
 	}
-	resp["tasks"] = tasks
-	jsonData, err := json.Marshal(resp)
-	if err != nil {
-		return nil, err
-	}
-	return jsonData, nil
+	return tasks, nil
 }

@@ -36,7 +36,7 @@ func GenerateJWT(userID, username string) (string, error) {
 	claims := token.Claims.(jwt.MapClaims)
 	claims["ID"] = userID
 	claims["username"] = username
-	claims["exp"] = time.Now().Add(time.Minute * 30).Unix()
+	claims["exp"] = time.Now().Add(time.Minute * 5000).Unix()
 	tokenString, err := token.SignedString(sampleSecretKey)
 	if err != nil {
 		return "", err
