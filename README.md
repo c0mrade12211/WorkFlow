@@ -24,6 +24,9 @@ WorkFlow is a web service developed using React and Golang, designed to enhance 
 - TypeScript ^5.2.2
 
 ## Installation and Setup
+- Frontend
+  You're need to clone this repository and complete installation (https://github.com/bombasters/frontend_workflow/tree/master)
+- BACKEND
 6. Run the server:
 go run main.go
 7. Start the frontend:
