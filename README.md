@@ -2,7 +2,8 @@ README.md
 
 # WorkFlow
 
-![WorkFlow Logo](/path/to/logo.png)
+
+<img width="113" alt="logo2" src="https://github.com/c0mrade12211/WorkFlow/assets/132468035/06b84679-a063-44bc-9a9b-812e0e9e507e">
 
 WorkFlow is a web service developed using React and Golang, designed to enhance employee motivation within a company. This website provides a motivational system that allows employees to view tasks assigned to their department, complete them in exchange for virtual coins, and use these coins to purchase items from the online store. This gamified approach encourages employees to work in a more engaging manner and provides additional incentives for task completion.
 
