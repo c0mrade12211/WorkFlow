@@ -38,6 +38,9 @@ If you would like to contribute to the development of WorkFlow, you can:
 - Report bugs or suggest improvements by creating an [issue]([https://github.com/your-username/WorkFlow/issues](https://github.com/c0mrade12211/xtracker-backend/issues)).
 - Create a [pull request]([https://github.com/your-username/WorkFlow/pulls](https://github.com/c0mrade12211/xtracker-backend/pulls)) with your changes or new features.
 
+## Will added soon
+In the future, we plan to actively work on ensuring the security of the system and excluding all possible SQL injections.
+
 ## License
 
 WorkFlow is licensed under the MIT License. For more information, please refer to the [LICENSE](https://github.com/c0mrade12211/xtracker-backend/blob/main/LICENSE) file.
