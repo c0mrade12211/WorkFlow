@@ -4,47 +4,46 @@ README.md
 
 ![WorkFlow Logo](/path/to/logo.png)
 
-WorkFlow - это веб-сервис, разработанный на React и Golang, предназначенный для улучшения мотивации сотрудников в компании. Этот веб-сайт предоставляет функционал системы мотивации, позволяющей сотрудникам видеть задачи своего отдела, выполнять их за монетки и покупать товары в магазине с использованием накопленных монеток. Такой подход позволяет мотивировать сотрудников работать играючи и создает дополнительную стимуляцию для выполнения задач.
+WorkFlow is a web service developed using React and Golang, designed to enhance employee motivation within a company. This website provides a motivational system that allows employees to view tasks assigned to their department, complete them in exchange for virtual coins, and use these coins to purchase items from the online store. This gamified approach encourages employees to work in a more engaging manner and provides additional incentives for task completion.
 
-## Особенности
+## Key Features
 
-- Пользовательский интерфейс, разработанный с использованием React, обеспечивает простоту и удобство в использовании.
-- Система мотивации позволяет сотрудникам видеть задачи своего отдела и выполнять их за монетки.
-- Встроенный магазин позволяет сотрудникам покупать товары на накопленные монетки.
-- Аутентификация и авторизация пользователей обеспечивают безопасность и конфиденциальность данных.
+- The user interface, built with React, offers simplicity and user-friendliness.
+- The motivational system enables employees to view and complete tasks assigned to their department in exchange for virtual coins.
+- The integrated online store allows employees to purchase items using the accumulated coins.
+- User authentication and authorization ensure data security and confidentiality.
 
-## Требования
+## Requirements
 
-- Node.js (версия X.X.X)
-- Golang (версия X.X.X)
-- PostgreSQL (версия X.X.X)
+- Node.js (version X.X.X)
+- Golang 
+- PostgreSQL (15 version)
 
-## Установка и настройка
+## Installation and Setup
 
-
-6. Запустите сервер:
+6. Run the server:
 go run main.go
-7. Запустите фронтенд:
-cd ../frontend
-npm start
-8. Откройте веб-браузер и перейдите по адресу [http://localhost:3000](http://localhost:3000), чтобы использовать WorkFlow.
+7. Start the frontend:
+Changed CORS on you're frontend-server
 
-## Вклад
+8. Open a web browser and go to [http://localhost:8080](http://localhost:8080) to access WorkFlow. Will be run backend
 
-Если вы хотите внести свой вклад в развитие проекта WorkFlow, вы можете сделать следующее:
+## Contribution
 
-- Сообщить об ошибке или предложить улучшение, создав [issue](https://github.com/your-username/WorkFlow/issues).
-- Создать [pull request](https://github.com/your-username/WorkFlow/pulls) с вашими изменениями или новыми функциями.
+If you would like to contribute to the development of WorkFlow, you can:
 
-## Лицензия
+- Report bugs or suggest improvements by creating an [issue]([https://github.com/your-username/WorkFlow/issues](https://github.com/c0mrade12211/xtracker-backend/issues)).
+- Create a [pull request]([https://github.com/your-username/WorkFlow/pulls](https://github.com/c0mrade12211/xtracker-backend/pulls)) with your changes or new features.
 
-WorkFlow распространяется под лицензией MIT. Подробную информацию можно найти в файле [LICENSE](/path/to/LICENSE).
+## License
 
-## Контакты
+WorkFlow is licensed under the MIT License. For more information, please refer to the [LICENSE](/path/to/LICENSE) file.
 
-Если у вас есть вопросы или предложения, вы можете связаться с нами по следующим контактам:
+## Contact
 
-- Email: your-email@example.com
-- Сайт: [https://www.workflow.com](https://www.workflow.com)
+If you have any questions or suggestions, you can contact us through the following channels:
 
-Мы рады вашей поддержке и надеемся, что WorkFlow будет полезен для вашей компании!
+- Email: best.sell@internet.ru
+- Website: [https://www.workflow.com](https://www.workflow.com)
+
+We appreciate your support and hope that WorkFlow proves beneficial for your company!
