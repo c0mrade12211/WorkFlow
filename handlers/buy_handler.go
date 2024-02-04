@@ -14,6 +14,7 @@ func BuyHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	authorizationHeader := r.Header.Get("Authorization")
 	if authorizationHeader == "" {
 		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
+		fmt.Println("hello")
 		return
 	}
 
