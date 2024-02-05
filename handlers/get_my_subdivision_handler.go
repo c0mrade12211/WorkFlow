@@ -9,7 +9,7 @@ import (
 )
 
 type User_sub struct {
-	Balance  string `json:"balance"`
+	Balance  int    `json:"balance"`
 	ID       int    `json:"id"`
 	Role     string `json:"role"`
 	Username string `json:"username"`
@@ -25,8 +25,9 @@ type Subdivision_my struct {
 
 type Employer struct {
 	Username string `json:"username"`
-	Balance  string `json:"balance"`
+	Balance  int    `json:"balance"`
 	Role     string `json:"role"`
+	ID       int    `json:"id"`
 }
 
 func GetMySubdivision(w http.ResponseWriter, r *http.Request, db *sql.DB) {
@@ -90,7 +91,7 @@ func GetMySubdivision(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		http.Error(w, "Failed to get subdivision info", http.StatusInternalServerError)
 		return
 	}
-	subdivisionEmployers, err := db.Query("SELECT username, balance, role FROM users WHERE subdivision = $1", subdivisionID)
+	subdivisionEmployers, err := db.Query("SELECT username, balance, role, id FROM users WHERE subdivision = $1", subdivisionID)
 	if err != nil {
 		http.Error(w, "Failed to get subdivision employers", http.StatusInternalServerError)
 		return
@@ -98,8 +99,9 @@ func GetMySubdivision(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	defer subdivisionEmployers.Close()
 	employers := []Employer{}
 	for subdivisionEmployers.Next() {
-		var username, balance, role string
-		err := subdivisionEmployers.Scan(&username, &balance, &role)
+		var username, role string
+		var employer_id, balance int
+		err := subdivisionEmployers.Scan(&username, &balance, &role, &employer_id)
 		if err != nil {
 			http.Error(w, "Failed to scan employer", http.StatusInternalServerError)
 			return
@@ -108,6 +110,7 @@ func GetMySubdivision(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			Username: username,
 			Balance:  balance,
 			Role:     role,
+			ID:       employer_id,
 		}
 		employers = append(employers, employer)
 	}

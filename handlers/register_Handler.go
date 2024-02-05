@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-
 	jwt_service "todo/JWT"
 	models "todo/models"
 
@@ -20,7 +19,6 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-
 	var existingUsername string
 	err = db.QueryRow("SELECT username FROM users WHERE username = $1", user.Username).Scan(&existingUsername)
 	if err == nil {
@@ -30,27 +28,25 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		http.Error(w, "Failed to check for existing username", http.StatusInternalServerError)
 		return
 	}
-
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
 		return
 	}
-
 	role := "user"
 	err = db.QueryRow("INSERT INTO users (username, password, role) VALUES ($1, $2, $3) RETURNING id", user.Username, string(hashedPassword), role).Scan(&user.ID)
 	if err != nil {
 		http.Error(w, "Failed to add user", http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	resp := map[string]interface{}{
 		"user": map[string]interface{}{
-			"username": user.Username,
-			"id":       user.ID,
-			"balance":  0,
-			"role":     role,
+			"username":    user.Username,
+			"id":          user.ID,
+			"balance":     0,
+			"role":        role,
+			"subdivision": nil,
 		},
 	}
 	token, err := jwt_service.GenerateJWT(fmt.Sprintf("%d", user.ID), user.Username)
