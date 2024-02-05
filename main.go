@@ -40,7 +40,6 @@ func GetTasksByUserID(userID string) ([]map[string]interface{}, error) {
 		}
 		tasks = append(tasks, task)
 	}
-
 	return tasks, nil
 }
 
@@ -54,14 +53,16 @@ func main() {
 	r := mux.NewRouter()
 
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"https://532d-95-26-26-242.ngrok-free.app"},
+		AllowedOrigins:   []string{"https://87aa-87-244-58-26.ngrok-free.app"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS", "DELETE"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
 	})
 
 	r.HandleFunc("/register", handlers.WithDB(handlers.RegisterHandler, db)).Methods("POST")
+	r.HandleFunc("/delete-req/{user_id}", handlers.WithDB(handlers.DeleteReq, db)).Methods("GET")
 	r.HandleFunc("/my-items", handlers.WithDB(handlers.MyItems, db)).Methods("GET")
+	r.HandleFunc("/accept-user", handlers.WithDB(handlers.AcceptUser, db)).Methods("POST")
 	r.HandleFunc("/request-invite/{subdiv_id}", handlers.WithDB(handlers.RequestForInvite, db)).Methods("GET")
 	r.HandleFunc("/use-my-item/{id}", handlers.WithDB(handlers.UseMyItem, db)).Methods("DELETE")
 	r.HandleFunc("/all-subdivisions", handlers.WithDB(handlers.ShowSubdivisions, db)).Methods("GET")
@@ -73,7 +74,7 @@ func main() {
 	r.HandleFunc("/shop", handlers.WithDB(handlers.ShopHandler, db)).Methods("GET")
 	r.HandleFunc("/buy/{id}", handlers.WithDB(handlers.BuyHandler, db)).Methods("GET")
 	r.HandleFunc("/create-item", handlers.WithDB(handlers.CreateItem, db)).Methods("POST")
-	r.HandleFunc("/my-subdivision", handlers.WithDB(handlers.GetTasksInSubdivisionHandler, db)).Methods("GET")
+	r.HandleFunc("/my-subdivision", handlers.WithDB(handlers.GetMySubdivision, db)).Methods("GET")
 	r.HandleFunc("/change-task/{id}", handlers.WithDB(handlers.ChangeStatus, db)).Methods("GET")
 	r.HandleFunc("/my-tasks", handlers.WithDB(handlers.MyTasksHandler, db)).Methods("GET")
 	r.HandleFunc("/invited-list", handlers.WithDB(handlers.InvitedList, db)).Methods("GET")
