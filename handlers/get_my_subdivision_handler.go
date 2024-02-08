@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	jwt_service "todo/JWT"
@@ -48,20 +49,22 @@ func GetMySubdivision(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 	rows, err := db.Query(`
-		SELECT tasks.id, tasks.created_at, tasks.description, tasks.title, users.subdivision, users.username
+		SELECT tasks.id, tasks.created_at, tasks.description, tasks.title, tasks.iscomplete, users.subdivision, users.username	
 		FROM tasks
 		INNER JOIN users ON tasks.userid = users.id
 		WHERE users.id = $1 OR users.subdivision = (SELECT subdivision FROM users WHERE id = $1)
 		ORDER BY tasks.created_at DESC`, userID)
 	if err != nil {
+		fmt.Println(err)
 		http.Error(w, "Failed to get tasks", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 	tasks := []interface{}{}
 	for rows.Next() {
+		var iscomplete bool
 		var taskID, taskCreatedAt, taskDescription, taskTitle, taskSubdivision, taskUsername interface{}
-		err := rows.Scan(&taskID, &taskCreatedAt, &taskDescription, &taskTitle, &taskSubdivision, &taskUsername)
+		err := rows.Scan(&taskID, &taskCreatedAt, &taskDescription, &taskTitle, &iscomplete, &taskSubdivision, &taskUsername)
 		if err != nil {
 			http.Error(w, "Failed to scan task", http.StatusInternalServerError)
 			return
@@ -71,6 +74,7 @@ func GetMySubdivision(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			"created_at":  taskCreatedAt,
 			"description": taskDescription,
 			"title":       taskTitle,
+			"iscomplete":  iscomplete,
 			"subdivision": taskSubdivision,
 			"username":    taskUsername,
 		}

@@ -19,6 +19,9 @@ type ItemResponse struct {
 }
 
 func MyItems(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 	authorizationHeader := r.Header.Get("Authorization")
 	if authorizationHeader == "" {
 		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)

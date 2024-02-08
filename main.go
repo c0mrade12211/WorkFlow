@@ -43,6 +43,17 @@ func GetTasksByUserID(userID string) ([]map[string]interface{}, error) {
 	return tasks, nil
 }
 
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "OPTIONS" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	connStr := "user=postgres password=test dbname=myapp sslmode=disable"
 	var err error
@@ -51,17 +62,20 @@ func main() {
 		log.Fatal(err)
 	}
 	r := mux.NewRouter()
-
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"https://87aa-87-244-58-26.ngrok-free.app"},
+		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS", "DELETE"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
 	})
+	r.Use(corsMiddleware)
+	r.Use(c.Handler)
 
+	r.HandleFunc("/delete-user-from-subdivision/{id}", handlers.WithDB(handlers.DeleteUserFromSubdivision, db)).Methods("GET")
 	r.HandleFunc("/register", handlers.WithDB(handlers.RegisterHandler, db)).Methods("POST")
 	r.HandleFunc("/delete-req/{user_id}", handlers.WithDB(handlers.DeleteReq, db)).Methods("GET")
 	r.HandleFunc("/my-items", handlers.WithDB(handlers.MyItems, db)).Methods("GET")
+	r.HandleFunc("/create_comment/{task_id}", handlers.WithDB(handlers.CreateComments, db)).Methods("POST")
 	r.HandleFunc("/accept-user", handlers.WithDB(handlers.AcceptUser, db)).Methods("POST")
 	r.HandleFunc("/request-invite/{subdiv_id}", handlers.WithDB(handlers.RequestForInvite, db)).Methods("GET")
 	r.HandleFunc("/use-my-item/{id}", handlers.WithDB(handlers.UseMyItem, db)).Methods("DELETE")
@@ -78,6 +92,8 @@ func main() {
 	r.HandleFunc("/change-task/{id}", handlers.WithDB(handlers.ChangeStatus, db)).Methods("GET")
 	r.HandleFunc("/my-tasks", handlers.WithDB(handlers.MyTasksHandler, db)).Methods("GET")
 	r.HandleFunc("/invited-list", handlers.WithDB(handlers.InvitedList, db)).Methods("GET")
+	r.HandleFunc("/task-info/{task_id}", handlers.WithDB(handlers.TaskInfo, db)).Methods("GET")
+	r.HandleFunc("/delete-item/{item_id}", handlers.WithDB(handlers.DeleteItem, db)).Methods("GET")
 
 	log.Println("Server started on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", c.Handler(r)))

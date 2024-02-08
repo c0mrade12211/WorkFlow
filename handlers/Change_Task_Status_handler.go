@@ -30,12 +30,39 @@ func ChangeStatus(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 	**/
 	taskID := mux.Vars(r)["id"]
-	row, err := db.Query("UPDATE tasks SET iscomplete = true WHERE id = $1", taskID)
+	value_now, err := db.Query("SELECT iscomplete FROM tasks WHERE id = $1", taskID)
+
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, "Failed to update task", http.StatusInternalServerError)
 		return
 	}
-	defer row.Close()
+	defer value_now.Close()
+	var iscomplete bool
+	for value_now.Next() {
+		err = value_now.Scan(&iscomplete)
+		if err != nil {
+			http.Error(w, "Failed to scan item", http.StatusInternalServerError)
+			fmt.Println(err)
+			return
+		}
+	}
+	if iscomplete == true {
+		row, err := db.Query("UPDATE tasks SET iscomplete = false WHERE id = $1", taskID)
+		if err != nil {
+			fmt.Println(err)
+			http.Error(w, "Failed to update task", http.StatusInternalServerError)
+			return
+		}
+		defer row.Close()
+	} else {
+		row, err := db.Query("UPDATE tasks SET iscomplete = true WHERE id = $1", taskID)
+		if err != nil {
+			fmt.Println(err)
+			http.Error(w, "Failed to update task", http.StatusInternalServerError)
+			return
+		}
+		defer row.Close()
+	}
 
 }
