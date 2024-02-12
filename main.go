@@ -6,11 +6,11 @@ import (
 	"log"
 	"net/http"
 	"todo/handlers"
+	"todo/userslib"
 
 	"github.com/gorilla/mux"
-	"github.com/rs/cors"
-
 	_ "github.com/lib/pq"
+	"github.com/rs/cors"
 )
 
 var db *sql.DB
@@ -81,6 +81,7 @@ func main() {
 	r.HandleFunc("/use-my-item/{id}", handlers.WithDB(handlers.UseMyItem, db)).Methods("DELETE")
 	r.HandleFunc("/all-subdivisions", handlers.WithDB(handlers.ShowSubdivisions, db)).Methods("GET")
 	r.HandleFunc("/login", handlers.WithDB(handlers.LoginHandler, db)).Methods("POST")
+	r.HandleFunc("/get-news", userslib.GetXakerNewsHandler).Methods("GET")
 	r.HandleFunc("/get-me", handlers.WithDB(handlers.GetProfileHandler, db)).Methods("GET")
 	r.HandleFunc("/create-task", handlers.WithDB(handlers.CreateTaskHandler, db)).Methods("POST")
 	r.HandleFunc("/delete-task/{id}", handlers.WithDB(handlers.DeleteTaskHandler, db)).Methods("DELETE")

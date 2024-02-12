@@ -10,11 +10,11 @@ import (
 )
 
 type UserGet struct {
-	Balance     string         `json:"balance"`
-	ID          string         `json:"id"`
-	Role        string         `json:"role"`
-	Username    string         `json:"username"`
-	Subdivision SubdivisionGet `json:"subdivision"`
+	Balance     string          `json:"balance"`
+	ID          string          `json:"id"`
+	Role        string          `json:"role"`
+	Username    string          `json:"username"`
+	Subdivision *SubdivisionGet `json:"subdivision"`
 }
 
 type SubdivisionGet struct {
@@ -24,21 +24,18 @@ type SubdivisionGet struct {
 
 func GetProfileHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	authorizationHeader := r.Header.Get("Authorization")
-
 	if authorizationHeader == "" {
 		http.Error(w, "Authorization header is missing", http.StatusUnauthorized)
 		return
 	}
 
 	authHeaderParts := strings.Split(authorizationHeader, " ")
-
 	if len(authHeaderParts) != 2 || authHeaderParts[0] != "Bearer" {
 		http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
 		return
 	}
 
 	tokenString := authHeaderParts[1]
-
 	userID, err := jwt_service.ParseJWT(tokenString)
 	if err != nil {
 		http.Error(w, "Invalid JWT token", http.StatusUnauthorized)
@@ -46,7 +43,6 @@ func GetProfileHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	row := db.QueryRow("SELECT username, balance, role, subdivision FROM users WHERE id = $1", userID)
-
 	var username string
 	var balance string
 	var role string
@@ -58,21 +54,21 @@ func GetProfileHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	var subdivisionInfo SubdivisionGet
+	var subdivisionInfo *SubdivisionGet
 	if subdivisionID.Valid {
 		subdivisionRow := db.QueryRow("SELECT name FROM subdivisions WHERE subdivision_id = $1", subdivisionID.Int64)
-
 		var subdivisionName string
 		err = subdivisionRow.Scan(&subdivisionName)
 		if err != nil {
 			http.Error(w, "Failed to get subdivision info", http.StatusInternalServerError)
 			return
 		}
-
-		subdivisionInfo = SubdivisionGet{
+		subdivisionInfo = &SubdivisionGet{
 			Name: subdivisionName,
 			ID:   int(subdivisionID.Int64),
 		}
+	} else {
+		subdivisionInfo = nil
 	}
 
 	user := UserGet{
@@ -94,6 +90,5 @@ func GetProfileHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-
 	w.Write(jsonResp)
 }

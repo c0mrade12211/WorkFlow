@@ -83,6 +83,7 @@ func GetMySubdivision(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	subdivisionID := 0
 	err = db.QueryRow("SELECT subdivision FROM users WHERE id = $1", userID).Scan(&subdivisionID)
 	if err != nil {
+		fmt.Println(err)
 		http.Error(w, "Failed to get subdivision", http.StatusInternalServerError)
 		return
 	}
@@ -92,11 +93,13 @@ func GetMySubdivision(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}{}
 	err = db.QueryRow("SELECT name, balance, role, id, username FROM subdivisions JOIN users ON subdivisions.owner = users.id WHERE subdivision_id = $1", subdivisionID).Scan(&subdivisionInfo.Name, &subdivisionInfo.Owner.Balance, &subdivisionInfo.Owner.Role, &subdivisionInfo.Owner.ID, &subdivisionInfo.Owner.Username)
 	if err != nil {
+		fmt.Println(err)
 		http.Error(w, "Failed to get subdivision info", http.StatusInternalServerError)
 		return
 	}
 	subdivisionEmployers, err := db.Query("SELECT username, balance, role, id FROM users WHERE subdivision = $1", subdivisionID)
 	if err != nil {
+		fmt.Println(err)
 		http.Error(w, "Failed to get subdivision employers", http.StatusInternalServerError)
 		return
 	}
