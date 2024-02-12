@@ -75,6 +75,7 @@ func main() {
 	r.HandleFunc("/register", handlers.WithDB(handlers.RegisterHandler, db)).Methods("POST")
 	r.HandleFunc("/delete-req/{user_id}", handlers.WithDB(handlers.DeleteReq, db)).Methods("GET")
 	r.HandleFunc("/my-items", handlers.WithDB(handlers.MyItems, db)).Methods("GET")
+	r.HandleFunc("/delete_comment/{id}", handlers.WithDB(handlers.DeleteComment, db)).Methods("GET")
 	r.HandleFunc("/create_comment/{task_id}", handlers.WithDB(handlers.CreateComments, db)).Methods("POST")
 	r.HandleFunc("/accept-user", handlers.WithDB(handlers.AcceptUser, db)).Methods("POST")
 	r.HandleFunc("/request-invite/{subdiv_id}", handlers.WithDB(handlers.RequestForInvite, db)).Methods("GET")
